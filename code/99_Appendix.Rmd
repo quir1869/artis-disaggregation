@@ -1,0 +1,462 @@
+---
+title: "99_Appendix"
+author: "Connor Quiroz"
+date: "2025-04-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r consuption data analysis}
+
+# Combine consumption and taxonomic data
+consumption_sciname <- left_join(consumption_all_years, sciname, by = "sciname")
+
+# Remove R objects (free up data usage)
+rm(consumption_all_years)
+
+# Create phylogenetic variables
+consumption_sciname <- taxa_level_vars(consumption_sciname) %>%
+  exploreARTIS::add_region("consumer_iso3c", region.col.name = "region") # add in region
+
+# Proportions of producing countries reporting to **at least** that taxonomic level (should be cumulative probabilities)
+# Set up whether a producing country reported to at least a certain level (1 means it could also go lower (e.g., 1 in class means it could be just class or goes all the way to species))
+consumption_sciname <- at_least_vars(data = consumption_sciname)
+    #  %>% rename(consumer_iso3c = producer_iso3c)
+
+# # Read in  Adaptive Capacity data
+# hdi <- read.csv("../data/hdi.csv")
+# 
+# hdi <- hdi %>%
+#   rename(consumer_iso3c = "country") %>%
+#   select(-date_obtained)
+# 
+# # Convert country names to iso3c codes
+# for (i in 1:length(hdi$consumer_iso3c)) {
+#   hdi$consumer_iso3c[i] <- countryname(hdi$consumer_iso3c[i], destination = "iso3c")
+# }
+# 
+# # Variable names for consumption
+# names(consumption)
+# 
+# # Looking at total weights per country (aggregating species weight in 2019)
+# con_weight <- consumption %>%
+#   filter(consumer_iso3c != producer_iso3c & str_detect(sciname, pattern = "\ ")) %>%
+#   group_by(consumer_iso3c) %>%
+#   mutate(live_weight_t = as.numeric(live_weight_t)) %>%
+#   summarize(total_weight = sum(live_weight_t)) %>%
+#   arrange(desc(total_weight))
+# 
+# # Shannon diversity of countries' imports
+# con_shannon <- consumption_sciname %>%
+#   filter(consumer_iso3c != producer_iso3c & str_detect(sciname, pattern = "\ ")) %>%
+#   group_by(consumer_iso3c, genus) %>%
+#   summarize(genus_total = sum(live_weight_t)) %>%
+#   group_by(consumer_iso3c) %>%
+#   mutate(genus_total_country = sum(genus_total)) %>%
+#   ungroup() %>%
+#   mutate(pi = genus_total / genus_total_country, pi_lnpi = pi * log(pi)) %>%
+#   group_by(consumer_iso3c) %>%
+#   summarize(shannon = -sum(pi_lnpi))
+# 
+# # Join quantity and diversity
+# con_joined <- left_join(con_weight, con_shannon, by = "consumer_iso3c")
+# 
+# # Add in hdi values to joined dataset
+# con_joined <- left_join(con_joined, hdi, by = "consumer_iso3c")
+# 
+# # Store phylogenetic levels in a vector
+# levels <- c()
+# levels <- unique(consumption_sciname$taxa_level)
+# 
+# # Remove superclass (only 1 according to taxa_level variable) and species (different analysis to get prop)
+# levels <- levels[!(levels %in% c("superclass", "species", "phylum"))]
+
+# # Add back in species
+# levels <- c("species", "genus", "family", "order", "class")
+# 
+# # Percentage of countries that report to species (no species column in sciname data - have to do different way from rest of taxonomic groups)
+# con_joined <- con_joined %>%
+#   mutate(prop_at_least_species = prop_exactly_species)
+# 
+# # Update joined dataset to have log transformed total weight as a variable
+# con_joined <- con_joined %>%
+#   mutate(log_weight = log(total_weight))
+# 
+# # Add in region (e.g., North America, Asia, etc.)
+# con_joined <- con_joined %>%
+#   exploreARTIS::add_region("consumer_iso3c", region.col.name = "region")
+# 
+# # Consumption data without NA's (for correlation plots)
+# con_na_removed <- con_joined %>%
+#   drop_na()
+# 
+# # Remove NA region
+# con_joined <- con_joined %>%
+#   drop_na(region)
+# 
+# # Sort countries in alphabetical order
+# con_joined %>%
+#   arrange(-desc(consumer_iso3c))
+# 
+# # Prints out number of unique values per phylogenetic group
+# for (i in c(19, 21, 22, 23)) {
+#   print(c(length(unique(na.omit(consumption_sciname[[i]]))), names(consumption_sciname)[i]))
+# }
+```
+
+
+```{r Look at data coverage problems in specific countries}
+# CASE STUDY: Look at papua new guinea vs micronesia catch / reporting
+x <- scinames_excluding_tradeflows %>%
+  filter(eez_iso3c == "FSM") %>%
+  mutate(micronesia = 1)
+
+y <- scinames_excluding_tradeflows %>% 
+  filter(eez_iso3c == "PNG") %>%
+  select(sciname_hs_modified) %>%
+  mutate(papua = 1)
+
+papua_all_columns <- scinames_excluding_tradeflows %>% 
+  filter(eez_iso3c == "PNG")
+
+z <- full_join(x, y)
+
+only_in_papua <- z %>%
+  filter(papua == 1, is.na(micronesia))
+
+# only_in_papua <- only_in_papua %>%
+#   select(sciname_hs_modified) %>%
+#   left_join(papua_all_columns)
+
+only_in_micronesia <- z %>%
+  filter(micronesia == 1, is.na(papua))
+
+micro_genus <- only_in_micronesia %>%
+  pull(genus)
+
+micro_subfamily <- only_in_micronesia %>%
+  pull(subfamily)
+
+micro_family <- only_in_micronesia %>%
+  pull(family)
+
+micro_order <- only_in_micronesia %>%
+  pull(order)
+
+micro_class <- only_in_micronesia %>%
+  pull(class)
+
+micro_superclass <- only_in_micronesia %>%
+  pull(superclass)
+
+micro_phylum <- only_in_micronesia %>%
+  pull(phylum)
+
+micro_kingdom <- only_in_micronesia %>%
+  pull(kingdom)
+
+ names_in_both <- only_in_papua %>%
+  filter(sciname_hs_modified %in% micro_genus |
+           sciname_hs_modified %in% micro_subfamily |
+           sciname_hs_modified %in% micro_family |
+           sciname_hs_modified %in% micro_order |
+           sciname_hs_modified %in% micro_class |
+           sciname_hs_modified %in% micro_superclass |
+           sciname_hs_modified %in% micro_phylum |
+           sciname_hs_modified %in% micro_kingdom) %>%
+  select(sciname_hs_modified) %>%
+  left_join(papua_all_columns) %>%
+  select(sciname_hs_modified, common_name, taxa_level) %>%
+   pull(sciname_hs_modified)
+ 
+ x %>%
+  filter(
+    apply(.[, c("genus", "family", "order", "class")], 1, function(row) {
+      # Check if any column contains a match in the list of scientific names
+      any(str_detect(row, paste(names_in_both, collapse = "|")))
+    })
+  ) %>%
+   pull(common_name)
+ 
+x %>%
+  filter(if_any(contains(names_in_both)))
+
+x %>%
+  filter(str_detect(common_name, "tuna"))
+
+papua_all_columns %>%
+  filter(str_detect(common_name, "tuna"))
+
+papua_all_columns %>%
+  filter(str_detect(class, "actinopterygii")) %>%
+  slice(1,6)
+
+
+
+####################
+####################
+####################
+
+# Scenario 1
+taxa_levels <- c("class", "order", "family", "genus", "species")
+scenario_1 <- c()
+for (i in 1:(length(taxa_levels) - 1)) {
+  value <- scinames_excluding_tradeflows %>%
+    mutate(
+      species = case_when(
+        str_count(sciname_hs_modified, " ") == 1 ~ str_split(sciname_hs_modified, " ") %>% 
+          sapply(function(x) x[2]), # Extract second word if exactly two words
+        TRUE ~ NA_character_ # Return NA if not two words
+      )
+    ) %>%
+    filter(eez_iso3c == "FSM") %>%
+    group_by_at(taxa_levels[i]) %>%  # Group by the current taxa level (e.g., class)
+    filter(!is.na(get(taxa_levels[i]))) %>%  # Filter out NA values for the current level
+    summarize(
+      all_next_na = all(!is.na(get(taxa_levels[i + 1]))),  # Check if the next taxa level is NA
+      .groups = "drop"
+    ) %>%
+    summarize(sum = sum(all_next_na)) %>% # Summarize how many rows have all NA for the next taxa level
+    pull(sum)
+  scenario_1 <- append(scenario_1, value)
+}
+
+####################
+####################
+####################
+
+
+# Scenario 2
+
+scenario_2 <- c()
+for (i in 1:(length(taxa_levels) - 1)) {
+  value <- scinames_excluding_tradeflows %>%
+    mutate(
+      species = case_when(
+        str_count(sciname_hs_modified, " ") == 1 ~ str_split(sciname_hs_modified, " ") %>% 
+          sapply(function(x) x[2]), # Extract second word if exactly two words
+        TRUE ~ NA_character_ # Return NA if not two words
+      )
+    ) %>%
+    group_by_at(taxa_levels[i]) %>%  # Group by the current taxa level (e.g., class)
+    filter(!is.na(get(taxa_levels[i]))) %>%  # Filter out NA values for the current level
+    summarize(
+      all_next_na = all(is.na(get(taxa_levels[i + 1]))),  # Check if the next taxa level is NA
+      .groups = "drop"
+    ) %>%
+    summarize(sum = sum(all_next_na)) %>% # Summarize how many rows have all NA for the next taxa level
+    pull(sum)
+  scenario_2 <- append(scenario_2, value)
+}
+
+
+scinames_excluding_tradeflows %>%
+  mutate(
+    species = case_when(
+      str_count(sciname_hs_modified, " ") == 1 ~ str_split(sciname_hs_modified, " ") %>%
+        sapply(function(x) x[2]), # Extract second word if exactly two words
+      TRUE ~ NA_character_ # Return NA if not two words
+    )
+  ) %>%
+  group_by(order) %>%
+  filter(!is.na(order)) %>%
+  summarize(
+    all_genus_na = all(is.na(family)),  # Check if all rows for a class have NA in genus
+    .groups = "drop"
+  ) %>%
+  summarize(sum = sum(all_genus_na))
+
+####################
+####################
+####################
+
+# Scenario 3
+scenario_3 <- c()
+for (i in 1:(length(taxa_levels) - 1)) {
+  value <- scinames_excluding_tradeflows %>%
+    mutate(
+      species = case_when(
+        str_count(sciname_hs_modified, " ") == 1 ~ str_split(sciname_hs_modified, " ") %>% 
+          sapply(function(x) x[2]), # Extract second word if exactly two words
+        TRUE ~ NA_character_ # Return NA if not two words
+      )
+    ) %>%
+    group_by_at(taxa_levels[i]) %>%  # Group by the current taxa level (e.g., class)
+    filter(!is.na(get(taxa_levels[i]))) %>%  # Filter out NA values for the current level
+    summarize(
+      all_next_na = any(is.na(get(taxa_levels[i + 1]))),  # Check if the next taxa level is NA
+      .groups = "drop"
+    ) %>%
+    summarize(sum = sum(all_next_na)) %>% # Summarize how many rows have all NA for the next taxa level
+    pull(sum)
+  scenario_3 <- append(scenario_3, value)
+}
+
+# Correct scenario 3 counts (scenario 3 originally includes stuff from scenario 2, so subtract if 2 > 3)
+for (i in 1:4) {
+  if(scenario_3[i] >= scenario_2[i]) {
+    scenario_3[i] <- scenario_3[i] - scenario_2[i]
+  }
+}
+
+data.frame(missing_taxa = c(scenario_1, scenario_2, scenario_3),
+           scenario = rep(c("1", "2", "3"), each = 4),
+           taxa_level = c("Class", "Order", "Family", "Genus")) %>%
+  ggplot(aes(x = factor(taxa_level, levels = c("Genus", "Family", "Order", "Class")), 
+             y = missing_taxa, 
+             fill = scenario)) +
+  geom_col(position = "fill") +
+  labs(x = "Taxa level", y = "Missing taxa", fill = "Scenario") +
+  theme_light() +
+  scale_fill_viridis_d(end = 0.8)
+
+####################
+####################
+####################
+
+
+
+
+
+
+scinames_excluding_tradeflows
+
+
+
+
+scinames_excluding_tradeflows %>%
+  mutate(
+    species = case_when(
+      str_count(sciname_hs_modified, " ") == 1 ~ str_split(sciname_hs_modified, " ") %>% 
+        sapply(function(x) x[2]), # Extract second word if exactly two words
+      TRUE ~ NA_character_ # Return NA if not two words
+    )
+  ) %>%
+  filter(eez_iso3c == "FSM") %>%
+  group_by(genus) %>%
+  filter(!is.na(genus)) %>%
+  distinct(class)
+
+scinames_excluding_tradeflows %>%
+  filter(eez_iso3c == "FSM") %>%
+  group_by(family) %>%
+  filter(!is.na(family)) %>%
+  distinct(family)
+
+```
+
+```{r read in fb/slb data}
+# Obtain FB / SLB faoareas() data
+  fb_presences_faoareas <- faoareas(species_list = fb_species_codes$Species, server = "fishbase")
+  slb_presences_faoareas <- faoareas(species_list = fb_species_codes$Species, server = "sealifebase") 
+  
+write_parquet(fb_presences_faoareas, "../data/fb_slb_data/fb_presences_faoareas.parquet")
+write_parquet(slb_presences_faoareas, "../data/fb_slb_data/slb_presences_faoareas.parquet")
+```
+
+
+```{r work with fb/slb data}
+fb_presences_faoareas <- read_parquet("../data/fb_slb_data/fb_presences_faoareas.parquet")
+slb_presences_faoareas <- read_parquet("../data/fb_slb_data/slb_presences_faoareas.parquet")
+
+# METHOD 1: rfishbase::faoareas() - takes awhile to run thus commented
+# fishbase_presences_faoareas <- taxa_presence_or_absence_faoareas(data = "fishbase")
+# sealifebase_presences_faoareas <- taxa_presence_or_absence_faoareas(data = "sealifebase")
+# 
+# # Filter to only have sealifebase data (separate out sealifebase base using source variable)
+# only_sealifebase <- sealifebase_presences_faoareas %>%
+#   filter(source == "sealifebase")
+# 
+# # Get indexes where sealifebase found presences or absences
+# sealifebase_presence_absences_indexes <- which(sealifebase_presences_faoareas$presence_or_absence %in% c(0,1))
+# 
+# # Select fishbase + unlinked NA data (excludes sealifebase)
+# fishbase_minus_sealifebase <- fishbase_presences_faoareas[-sealifebase_presence_absences_indexes,]
+# 
+# # Merce fishbase / sealifebase presence data - this will be the data that we use to interpolate higher taxonomic resolutions!
+# merged_presence_absence_data_faoareas <- bind_rows(fishbase_minus_sealifebase, only_sealifebase)
+# 
+# merged_presence_absence_data_faoareas %>%
+#   count(presence_or_absence)
+
+
+# Get unique taxonomic entries (no repeats)
+unique_taxonomy_entries <- scinames_excluding_tradeflows
+
+# Determines whether something is reported to **at least** a given taxonomic level
+unique_taxonomy_entries <- at_least_vars(unique_taxonomy_entries)
+
+# Add in species binary Yes or no
+unique_taxonomy_entries <- unique_taxonomy_entries %>%
+  mutate(at_least_species = case_when(taxa_level == "species" ~ 1, TRUE ~ 0)) %>%
+  relocate(at_least_species, .before = at_least_genus)
+
+# Count taxonomic totals
+taxa_unreported_props <- data.frame()
+taxa_unreported_quantity <- data.frame()
+for (i in levels) {
+  amount <- unique_taxonomy_entries %>%
+    ungroup() %>%
+    summarize(sum = sum(!(!!sym(paste0("at_least_",i))))) %>%
+    pull(sum)
+  total <- length(unique_taxonomy_entries$sciname)
+  prop <- amount / total
+  taxa_unreported_props <- bind_rows(taxa_unreported_props, list(i, round(prop, 2)))
+  taxa_unreported_quantity <- bind_rows(taxa_unreported_quantity, list(i, total))
+}
+
+# Rename taxa_total variables
+taxa_unreported_props <- taxa_unreported_props %>%
+  rename(taxa_level = "X.species.", prop = "X0.2")
+
+taxa_unreported_quantity <- taxa_unreported_quantity %>%
+  rename(taxa_level = "X.species.", prop = "X2232L")
+
+# Reports proportion and quantities that are not reported to a given taxonomic level.
+print(taxa_unreported_props)
+print(taxa_unreported_quantity)
+
+```
+
+
+```{r INTERPOLATION}
+# Create data that is prepared for interpolation (slb + artis presence data with taxa names for target taxa level and **above**)
+# Our goal: Estimate taxa levels below ones that aren't high resolution (e.g., order --> family)
+data_for_interpolation <- taxa_level_vars(data = presence_absence_data_linked_unlinked, taxa_var = "sciname_hs_modified") %>%
+  at_least_vars(grouping = "eez_iso3c", taxa_var = "sciname_hs_modified") %>%
+  select(-unique_vals, -presence_or_absence, -countries_found, -isscaap) %>%
+  relocate(species, .before = "genus")
+
+
+data_for_interpolation <- left_join(data_for_interpolation, linked_unlinked_props, by = "eez_iso3c") %>%
+  select(-number_absences, -number_presences, -quantity_NA)
+
+# Linear model measuring prop missing versus prop of stock reported to species
+lm(prop_missing ~ prop_at_least_species, data = data_for_interpolation) %>%
+  summary()
+
+# See which countries have the most missing taxa
+data_for_interpolation %>%
+  filter(source != "unlinked" | is.na(source)) %>%
+  group_by(eez_iso3c) %>%
+  distinct(prop_missing) %>%
+  arrange(-prop_missing)
+
+data_for_interpolation %>%
+  filter(eez_iso3c == "PSE") %>%
+  select(sciname_hs_modified, taxa_level, presence_or_absence_all_taxa, family, class)
+
+consumption_sciname %>% ungroup() %>% filter(eez_iso3c == "USA") %>%
+  mutate(species = map_chr(sciname_hs_modified, ~ str_split(.x, " ")[[1]][2])) %>%
+  select(sciname_hs_modified, eez_iso3c, species, genus, family, order, class, phylum, kingdom, taxa_level) %>% 
+  distinct() %>%
+  filter(!is.na(sciname_hs_modified)) %>%
+  group_by(class) %>%
+  distinct(species) %>%
+  summarize(num_species = n_distinct(species)) %>%
+  arrange(num_species) %>%
+    filter(is.na(species) & count(., class) == 1)
+```
