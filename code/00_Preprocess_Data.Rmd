@@ -321,7 +321,7 @@ if (!file.exists("../data/fb_slb_data/")) {
   # Write files to .parquet
   write_parquet(fb_presences_country, "../data/fb_slb_data/fb_presences_country.parquet")
   write_parquet(slb_presences_country, "../data/fb_slb_data/slb_presences_country.parquet")
-  write_parquet(slb_species_codes, "../data/fb_slb_data/fb_species_codes")
+  write_parquet(slb_species_codes, "../data/fb_slb_data/fb_species_codes.parquet")
   write_parquet(slb_species_codes, "../data/fb_slb_data/slb_species_codes.parquet")
 }
 ```
