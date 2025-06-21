@@ -334,7 +334,7 @@ scinames_excluding_tradeflows <- read_parquet("../output/scinames_excluding_trad
 fb_presences_country <- read_parquet("../data/fb_slb_data/fb_presences_country.parquet")
 slb_presences_country <- read_parquet("../data/fb_slb_data/slb_presences_country.parquet")
 
-fb_species_codes <- read_parquet("../data/fb_slb_data/fb_species_codes")
+fb_species_codes <- read_parquet("../data/fb_slb_data/fb_species_codes.parquet")
 slb_species_codes <- read_parquet("../data/fb_slb_data/slb_species_codes.parquet")
 
 scinames_excluding_tradeflows <- scinames_excluding_tradeflows %>%
@@ -366,8 +366,8 @@ scinames_excluding_tradeflows %>%
   length()
 
 # Total number of joined species succesfully from ARTIS
-length(unique(artis_fishbase_locations$Species))
-sum(str_detect(unique(artis_fishbase_locations$Species), " "))
+# length(unique(artis_fishbase_locations$Species))
+# sum(str_detect(unique(artis_fishbase_locations$Species), " "))
 
 # ***
 
