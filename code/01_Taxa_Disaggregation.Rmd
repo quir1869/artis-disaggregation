@@ -1,0 +1,97 @@
+---
+title: "Taxa disaggregation"
+author: "Connor Quiroz"
+date: "2025-06-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# General data cleaning + visualization + analysis packages
+library(tidyverse)
+library(ggformula)
+library(countrycode)
+library(data.table)
+library(arrow)
+library(cowplot)
+library(RColorBrewer)
+
+# Map creation
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+
+# Load in packages needed for ARTIS
+library(devtools)
+library(tidytext)
+# devtools::install_github("davidsjoberg/ggsankey")
+library(ggsankey)
+# devtools::install_github("Seafood-Globalization-Lab/exploreARTIS@v1.0.0", dependencies = TRUE)
+library(exploreARTIS)
+
+# For Packages for fishbase
+# remotes::install_github("cboettig/duckdbfs", force = TRUE)
+# remotes::install_github("ropensci/rfishbase")
+library(duckdbfs)
+library(rfishbase)
+```
+
+```{r initialize functions}
+# Ocean polygon
+ocean <- st_polygon(list(cbind(c(seq(-180, 179, len = 100), rep(180, 100), 
+                        seq(179, -180, len = 100), rep(-180, 100)),
+                      c(rep(-90, 100), seq(-89, 89, len = 100),
+                        rep(90, 100), seq(89, -90, len = 100))))) %>%
+  st_sfc(crs = "WGS84") %>%
+  st_as_sf()
+
+# Map creation function
+create_map <- function(data = data, fill = "prop_missing", country.col.name) {
+  world_map <- ne_countries(scale = "medium", returnclass = "sf")
+
+world_map <- world_map %>%
+  left_join(data, by = c("iso_a3" = country.col.name))
+  
+  world_map %>%
+ggplot() +
+  geom_sf(data = ocean, fill = "#8080ff80") +
+  geom_sf(aes(fill = !!sym(fill)), color = "black") + 
+  scale_fill_viridis_c(option = "plasma") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  coord_sf(crs = "+proj=robin")
+}
+```
+
+
+```{r preprocess consumption data to add sciname classification}
+# Read in prsence absence consumption data
+consumption_presence_absence <- read_parquet("../output/consumption_presence_absence.parquet") %>%
+  filter(year == 2019)
+
+# Read in sciname data
+sciname <- fread("../data/consumption/sciname.csv") 
+
+consumption_presence_absence <- left_join(consumption_presence_absence, 
+                                          sciname, 
+                                          by = c("sciname_hs_modified" = "sciname")) %>%
+  taxa_level_vars(taxa_var = "sciname_hs_modified")
+
+# Garbage collecter to clean up storage
+gc()
+
+consumption_presence_absence %>%
+  group_by(eez_iso3c) %>%
+  drop_na(presence_or_absence_all_taxa) %>%
+  summarize(sum_presences = sum(presence_or_absence_all_taxa)) %>%
+  create_map(fill = "sum_presences", country.col.name = "eez_iso3c")
+
+
+
+consumption_presence_absence %>%
+  filter(eez_iso3c == "AGO",
+         str_detect(class, "actinopterygii"))
+# Group by eez
+  
+```
+

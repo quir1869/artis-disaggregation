@@ -5,10 +5,6 @@ date: "2025-02-12"
 output: html_document
 ---
 
-> Revisions: 1. Many more presences - function for determining presence/absence is working much more effectively. 2. I've cleaned the fishbase/sealifebase names that don't originaly align with ARTIS to ensure that these don't automatically appear as absences and actually get checked for country presence/absence. 3. Removed code that wasn't necessary.
-
-> Question: What is the difference between sciname_hs_modifed and sciname?
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # General data cleaning + visualization + analysis packages
