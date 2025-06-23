@@ -97,8 +97,12 @@ taxa_presence_or_absence <- function(data = "fishbase", obtain_stats = FALSE) {
     valid_locations <- artis_fishbase_locations %>%
       filter(Status %in% c("native", "Native", "introduced", "endemic", "Endemic") & 
              !is.na(country)) %>%
-      mutate(eez_name = countrycode(country, origin = 'country.name', 
-                                   destination = 'iso3c', warn = FALSE)) %>%
+      mutate(eez_name = case_when(
+        country == "Micronesia" ~ "FSM",
+        TRUE ~ countrycode(country, 
+                           origin = 'country.name',
+                           destination = 'iso3c', 
+                           warn = FALSE))) %>%
       filter(!is.na(eez_name))
     
     num_countries <- valid_locations %>%
@@ -131,8 +135,12 @@ taxa_presence_or_absence <- function(data = "fishbase", obtain_stats = FALSE) {
     # FIXED: Simplified country presence logic
     fishbase_country_presences <- artis_fishbase_locations %>%
       filter(Status %in% c("native", "Native", "introduced", "endemic", "Endemic")) %>%
-      mutate(eez_name = countrycode(country, origin = 'country.name', 
-                                   destination = 'iso3c', warn = FALSE)) %>%
+      mutate(eez_name = case_when( # Correct micronesia since countrycode won't
+        country == "Micronesia" ~ "FSM",
+        TRUE ~ countrycode(country, 
+                           origin = 'country.name',
+                           destination = 'iso3c', 
+                           warn = FALSE))) %>%
       filter(!is.na(eez_name)) %>%
       group_by(ScientificName) %>%
       summarize(
@@ -307,15 +315,15 @@ slb_presences_country <- read_parquet("../data/fb_slb_data/slb_presences_country
 fb_species_codes <- read_parquet("../data/fb_slb_data/fb_species_codes.parquet")
 slb_species_codes <- read_parquet("../data/fb_slb_data/slb_species_codes.parquet")
 
-scinames_excluding_tradeflows <- scinames_excluding_tradeflows %>%
-  mutate(sciname_joinable_to_fishbase = sciname_hs_modified)
-
 # Read in unaligned species names
 unaligned_names <- fread("../data/fb_slb_data/unaligned_names.csv")
 
 # Look at which artis species names differ from fb/slb species names (ARTIS is more up to date)
 fb_slb <- bind_rows(fb_presences_country, slb_presences_country)
 setdiff(sciname$sciname[str_detect(sciname$sciname, " ")],fb_slb$ScientificName)
+
+scinames_excluding_tradeflows <- scinames_excluding_tradeflows %>%
+  mutate(sciname_joinable_to_fishbase = sciname_hs_modified)
 
 # ***
 # MAKING SURE ARTIS SCINAMES ALIGN WITH FISHBASE
@@ -396,6 +404,8 @@ presence_absence_data <- pa_only_artis %>%
   ungroup() %>%
   select(eez_iso3c, sciname_hs_modified, presence_or_absence_all_taxa)
 
+
+
 # Remove extraneous objects to save memory to make the following left_join faster
 rm(consumption, fb_presences_country, fb_slb, fb_species_codes, fishbase_presences_country,
    merged_presence_absence_data_country, pa_only_artis, sciname, sciname_metadata,
@@ -410,12 +420,15 @@ gc()
 consumption_presence_absence <- left_join(consumption_all_years, presence_absence_data, by = c("sciname_hs_modified", "eez_iso3c")) %>%
   relocate(eez_iso3c, .after = "consumer_iso3c")
 
+# Write to .parquet
+write_parquet(presence_absence_data, "../output/presence_absence_data.parquet")
+
+# Write to .parquet
+write_parquet(consumption_presence_absence, "../output/consumption_presence_absence.parquet")
+
 # Remove more objects
 rm(consumption_all_years, presence_absence_data)
 
 # Garbage collection
 gc()
-
-# Write to .parquet
-write_parquet(consumption_presence_absence, "../output/consumption_presence_absence.parquet")
 ```
