@@ -212,4 +212,3 @@ data.frame(missing_taxa = c(scenario_1, scenario_2, scenario_3),
   scale_fill_viridis_d(end = 0.8) +
   theme(axis.text = element_text(size = 8))
 ```
-
