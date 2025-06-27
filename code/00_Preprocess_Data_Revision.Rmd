@@ -188,78 +188,148 @@ taxa_presence_or_absence <- function(data = "fishbase", obtain_stats = FALSE) {
   }
 }
 
-create_hierarchical_presence <- function(country_data, genus_country_lookup = genus_country_lookup) {
+# Extract countries that are present
+get_country_taxa_data <- function(data) {
+  # Genus
+  genus_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(genus)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(genus, country) %>%
+    group_by(genus) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$genus)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "genus"
+    )
   
-  # Get all taxa that are definitely present (presence_or_absence == 1)
-  present_taxa <- country_data %>%
-    filter(presence_or_absence == 1) %>%
-    select(sciname_hs_modified, species, genus, subfamily, family, order, class, superclass, phylum, kingdom, countries_found) %>%
-    distinct()
+  # Subfamily
+  subfamily_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(subfamily)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(subfamily, country) %>%
+    group_by(subfamily) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$subfamily)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "subfamily"
+    )
   
-  # Create vectors of present taxa at each level (remove NAs)
-  present_species <- present_taxa$species[!is.na(present_taxa$species)]
-  present_genera <- present_taxa$genus[!is.na(present_taxa$genus)]
-  present_subfamilies <- present_taxa$subfamily[!is.na(present_taxa$subfamily)]
-  present_families <- present_taxa$family[!is.na(present_taxa$family)]
-  present_orders <- present_taxa$order[!is.na(present_taxa$order)]
-  present_classes <- present_taxa$class[!is.na(present_taxa$class)]
-  present_superclasses <- present_taxa$superclass[!is.na(present_taxa$superclass)]
-  present_phyla <- present_taxa$phylum[!is.na(present_taxa$phylum)]
-  present_kingdoms <- present_taxa$kingdom[!is.na(present_taxa$kingdom)]
+  # Family
+  family_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(family)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(family, country) %>%
+    group_by(family) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$family)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "family"
+    )
   
-  # Get list of countries that each taxa are present in
-  countries_by_genus <- genus_country_lookup
+  # Order
+  order_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(order)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(order, country) %>%
+    group_by(order) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$order)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "order"
+    )
   
-  # Now determine presence for all taxa in the country
-  country_data %>%
-    mutate(
-      presence_or_absence_all_taxa = case_when(
-        # If directly present in fishbase/sealifebase
-        presence_or_absence == 1 ~ 1,
-        
-        # If species not in fishbase/sealifebase, mark as NA
-        sciname_hs_modified %in% fbslb_species_not_in_artis ~ NA_real_,
-        
-        # Check hierarchical presence - if any more specific level exists and is absent, mark as 0
-        # Species level (most specific)
-        !is.na(species) & species %in% present_species ~ 1,
-        
-        # Genus level - only check if species is NA, but if genus is absent = 0
-        is.na(species) & !is.na(genus) & genus %in% present_genera ~ 1,
-        
-        # Subfamily level - only if species and genus are NA
-        is.na(species) & is.na(genus) & !is.na(subfamily) & subfamily %in% present_subfamilies ~ 1,
-        
-        # Family level - only if species, genus, subfamily are NA
-        is.na(species) & is.na(genus) & is.na(subfamily) & !is.na(family) & family %in% present_families ~ 1,
-        
-        # Order level - only if all more specific levels are NA
-        is.na(species) & is.na(genus) & is.na(subfamily) & is.na(family) & !is.na(order) & order %in% present_orders ~ 1,
-        
-        # Class level
-        is.na(species) & is.na(genus) & is.na(subfamily) & is.na(family) & is.na(order) & !is.na(class) & class %in% present_classes ~ 1,
-        
-        # Superclass level
-        is.na(species) & is.na(genus) & is.na(subfamily) & is.na(family) & is.na(order) & is.na(class) & !is.na(superclass) & superclass %in% present_superclasses ~ 1,
-        
-        # Phylum level
-        is.na(species) & is.na(genus) & is.na(subfamily) & is.na(family) & is.na(order) & is.na(class) & is.na(superclass) & !is.na(phylum) & phylum %in% present_phyla ~ 1,
-        
-        # Kingdom level (least specific)
-        is.na(species) & is.na(genus) & is.na(subfamily) & is.na(family) & is.na(order) & is.na(class) & is.na(superclass) & is.na(phylum) & !is.na(kingdom) & kingdom %in% present_kingdoms ~ 1,
-        
-        # Otherwise absent
-        TRUE ~ 0
-      ),
-      countries_found = case_when(
-        !is.na(genus) & genus %in% names(countries_by_genus) ~ countries_by_genus[genus],
-      TRUE ~ NA_character_
-      )) %>%
-    # Automatically assign any artis species that isn't in fb/slb as absent
-    mutate(presence_or_absence_all_taxa = case_when(
-      !is.na(species) & is.na(source) ~ 0,
-      TRUE ~ presence_or_absence_all_taxa
-    ))
+  # Class
+  class_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(class)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(class, country) %>%
+    group_by(class) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$class)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "class"
+    )
+  
+  # Superclass
+  superclass_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(superclass)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(superclass, country) %>%
+    group_by(superclass) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$superclass)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "superclass"
+    )
+  
+  # Phylum
+  phylum_country_lookup <- pa_only_artis %>%
+    filter(presence_or_absence == 1, !is.na(phylum)) %>%
+    mutate(country = strsplit(countries_found, " ")) %>%
+    unnest(country) %>%
+    distinct(phylum, country) %>%
+    group_by(phylum) %>%
+    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "),
+              .groups = "drop") %>%
+    {
+      setNames(.$countries_for_genus, .$phylum)
+    } %>%
+    data.table(
+      taxa_name = names(.),
+      countries_found = .,
+      taxa_level = "phylum"
+    )
+  
+  # Final data to be printed
+  data.table(
+    bind_rows(
+      genus_country_lookup,
+      subfamily_country_lookup,
+      family_country_lookup,
+      order_country_lookup,
+      class_country_lookup,
+      superclass_country_lookup,
+      phylum_country_lookup
+    )
+  ) %>%
+    select(-taxa_level)
+  
 }
 ```
 
@@ -420,146 +490,53 @@ fbslb_species_not_in_artis <- species_determination %>%
   filter(fb_slb == 1, is.na(artis) == TRUE) %>%
   pull(ScientificName)
 
-
+# Prepare data to increase presence / absence for all taxa, not just true species
 pa_only_artis <- merged_presence_absence_data_country %>%
   mutate(presence_or_absence = case_when(
     sciname_joinable_to_fishbase %in% fbslb_species_not_in_artis ~ NA, 
     TRUE ~ presence_or_absence))
 
-genus_country_lookup <- pa_only_artis %>%
-  filter(presence_or_absence == 1, !is.na(genus)) %>%
-  mutate(country = strsplit(countries_found, " ")) %>%
-  unnest(country) %>%
-  distinct(genus, country) %>%
-  group_by(genus) %>%
-  summarize(
-    countries_for_genus = paste(sort(unique(country)), collapse = " "),
-    .groups = "drop"
-  ) %>%
-  { setNames(.$countries_for_genus, .$genus) }
-
+# Get distributions that taxa are present in for a given country
+country_taxa_lookups <- get_country_taxa_data(pa_only_artis)
 
 # Get presences and absences for taxa levels higher than true species
 presence_absence_data <- pa_only_artis %>%
-  group_by(eez_iso3c) %>%
-  group_modify(~create_hierarchical_presence(.x, genus_country_lookup = genus_country_lookup)) %>%
-  relocate(presence_or_absence_all_taxa, .after = presence_or_absence) %>%
-  ungroup() %>%
-  select(eez_iso3c, sciname_hs_modified, presence_or_absence_all_taxa, countries_found)
+  left_join(country_taxa_lookups,
+            by = c("sciname_hs_modified" = "taxa_name")) %>%
+  mutate(
+    countries_found = case_when(
+      !countries_found.x == "" ~ countries_found.x,!countries_found.y == "" ~ countries_found.y,
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  mutate(presence_or_absence_all_taxa = case_when(str_detect(countries_found, eez_iso3c) ~ 1, TRUE ~ 0)) %>%
+  select(-countries_found.x, -countries_found.y, -presence_or_absence,
+         -sciname_joinable_to_fishbase, -new_sciname, -joined, -source) %>%
+  relocate(species, .before = genus)
 
-# Remove extraneous objects to save memory to make the following left_join faster
-# rm(consumption, fb_presences_country, fb_slb, fb_species_codes, fishbase_presences_country,
-#    merged_presence_absence_data_country, pa_only_artis, sciname, sciname_metadata,
-#    scinames_excluding_tradeflows, sealifebase_presences_country, slb_presences_country, 
-#    slb_species_codes, species_determination, unaligned_names, artis_species_not_in_fbslb,
-#    fbslb_species_not_in_artis)
+  # Remove extraneous objects to save memory to make the following left_join faster
+rm(consumption, fb_presences_country, fb_slb, fb_species_codes, fishbase_presences_country,
+   merged_presence_absence_data_country, pa_only_artis, sciname, sciname_metadata,
+   scinames_excluding_tradeflows, sealifebase_presences_country, slb_presences_country,
+   slb_species_codes, species_determination, unaligned_names, artis_species_not_in_fbslb,
+   fbslb_species_not_in_artis)
 
 # Garbage collection
 gc()
 
 # Join to consumption data
-# consumption_presence_absence <- left_join(consumption_all_years, presence_absence_data, by = c("sciname_hs_modified", "eez_iso3c")) %>%
-#   relocate(eez_iso3c, .after = "consumer_iso3c")
+consumption_presence_absence <- left_join(consumption_all_years, presence_absence_data, by = c("sciname_hs_modified", "eez_iso3c")) %>%
+  relocate(eez_iso3c, .after = "consumer_iso3c")
 
 # Write to .parquet
-# write_parquet(presence_absence_data, "../output/presence_absence_data.parquet")
+write_parquet(presence_absence_data, "../output/presence_absence_data.parquet")
 
 # Write to .parquet
-# write_parquet(consumption_presence_absence, "../output/consumption_presence_absence.parquet")
+write_parquet(consumption_presence_absence, "../output/consumption_presence_absence.parquet")
 
 # Remove more objects
-# rm(consumption_all_years, presence_absence_data)f
+rm(consumption_all_years, presence_absence_data)
 
 # Garbage collection
-# gc()
+gc()
 ```
-
-```{r}
-presence_absence_data %>%
-  filter(presence_or_absence_all_taxa == 0)
-# 
-# fread("../data/consumption/sciname.csv") %>%
-#   filter(sciname == "loliginidae")
-# scinames_excluding_tradeflows %>%
-# filter(class == "actinopterygii", eez_iso3c == "DOM")
-# 
-#  country("Lindbergichthys mizops")
-# 
-# scinames_excluding_tradeflows %>%
-#   filter(sciname_hs_modified == "lindbergichthys mizops")
-
-# sciname %>%
-#   filter(if_any(everything(), ~ str_detect(as.character(.x), regex("bathyraja irrasa", ignore_case = TRUE))))
-# 
-# country("Bathyraja irrasa", server = "sealifebase")
-# 
-# setdiff(sciname$sciname[str_detect(sciname$sciname, " ")],fb_slb$ScientificName)[setdiff(sciname$sciname[str_detect(sciname$sciname, " ")],fb_slb$ScientificName) == "bathyraja irrasa"]
-# 
-# fb_slb %>%
-#   filter(if_any(everything(), ~ str_detect(as.character(.x), regex("bathyraja irrasa", ignore_case = TRUE))))
-
-test_data <- pa_only_artis %>%
-    filter(presence_or_absence == 1) %>%
-    select(sciname_hs_modified, species, genus, subfamily, family, order, class, superclass, phylum, kingdom, countries_found) %>%
-    distinct()
-
-paste(unique(strsplit(paste((test_data %>%
-  filter(class == "actinopterygii"))$countries_found, collapse = " "), " ")[[1]]), collapse = " ")
-
-  
-  
-paste("USA CHN", "CAD BOS", sep = " ")
-
-
-pa_only_artis %>%
-    filter(presence_or_absence == 1, !is.na(genus)) %>% 
-    # split the space-separated string into one row per country
-    mutate(country = strsplit(countries_found, " ")) %>% 
-    unnest(country) %>% 
-    distinct(genus, country) %>% 
-    # re-collapse for each genus
-    group_by(genus) %>% 
-    summarize(countries_for_genus = paste(sort(unique(country)), collapse = " "), 
-              .groups = "drop")
-
-
-left_join(presence_absence_data, sciname, by = c("sciname_hs_modified" = "sciname")) %>%
-  filter(!is.na(genus),
-         !str_detect(sciname_hs_modified, " "))
-
-presence_absence_data %>%
-  filter(presence_or_absence_all_taxa == 0)
-
-left_join(presence_absence_data, sciname, by = c("sciname_hs_modified" = "sciname")) %>%
-  filter(str_detect(sciname_hs_modified, "cantherhines"))
-
-presence_absence_data %>%
-  count(presence_or_absence_all_taxa)
-
-pa_only_artis[apply(pa_only_artis, 1, function(row) any(grepl("murex", row, ignore.case = TRUE))), ]
-pa_only_artis[apply(pa_only_artis, 1, function(row) any(grepl("cantherhines", row, ignore.case = TRUE))), ]
-
-
-```
-
-```{r}
-# Get all taxa that are definitely present (presence_or_absence == 1)
-  present_taxa <- pa_only_artis %>%
-    filter(presence_or_absence == 1) %>%
-    select(sciname_hs_modified, species, genus, subfamily, family, order, class, superclass, phylum, kingdom, countries_found) %>%
-    distinct()
-  
-  # Create vectors of present taxa at each level (remove NAs)
-  present_species <- present_taxa$species[!is.na(present_taxa$species)]
-  present_genera <- present_taxa$genus[!is.na(present_taxa$genus)]
-  present_subfamilies <- present_taxa$subfamily[!is.na(present_taxa$subfamily)]
-  present_families <- present_taxa$family[!is.na(present_taxa$family)]
-  present_orders <- present_taxa$order[!is.na(present_taxa$order)]
-  present_classes <- present_taxa$class[!is.na(present_taxa$class)]
-  present_superclasses <- present_taxa$superclass[!is.na(present_taxa$superclass)]
-  present_phyla <- present_taxa$phylum[!is.na(present_taxa$phylum)]
-  present_kingdoms <- present_taxa$kingdom[!is.na(present_taxa$kingdom)]
-  
-any(str_detect(present_genera, "cantherhines"))
-```
-

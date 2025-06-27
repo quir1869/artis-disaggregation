@@ -460,3 +460,114 @@ consumption_sciname %>% ungroup() %>% filter(eez_iso3c == "USA") %>%
   arrange(num_species) %>%
     filter(is.na(species) & count(., class) == 1)
 ```
+
+```{r integrate unlinked data}
+# Get species that aren't apart of artis, but are only included in fishbase/sealife base (extra species locations we need to increase the number of presences in the artis data)
+# RESULT: Adding in fishbase/sealifebase doesn't add any presences to artis data - run this code after generating presence_absence_data
+
+# Get only non-artis species that are of commercial interest
+fb_slb_commercial_interests <-  anti_join(
+  bind_rows(fb_presences_country %>%
+              mutate(source = "fishbase"), 
+            slb_presences_country %>% 
+              mutate(source = "sealifebase")), 
+  sciname %>% 
+    filter(str_detect(sciname, " ")) %>% 
+    distinct(), 
+  by = c("ScientificName" = "sciname")
+  ) %>%
+  filter((Status %in% c("native", "Native", "introduced", "endemic") & !is.na(country)) & (Importance %in% c("minor commercial", "highly commercial", "commercial", "subsistence fisheries", "of potential interest"))) # Get only commercial species
+
+# Convert fb/slb commercial marine country names to iso3c codes + filter out countries NOT in ARTIS
+fb_slb_commercial_interests <- fb_slb_commercial_interests %>%
+  select(country, ScientificName, Species, Genus, SubFamily, Family, Order, Class, SuperClass, Phylum, Kingdom) %>%
+    mutate(country = countrycode(country, origin = 'country.name', destination = 'iso3c')) %>%
+    filter(country %in% unique(pa_only_artis$eez_iso3c)) %>%
+    group_by(ScientificName) %>%
+  mutate(countries_found = paste0(country, collapse = " ")) %>%
+  distinct(ScientificName, .keep_all = TRUE) %>%
+  mutate(presence_or_absence = 1) %>% # These species are found in the countries, so we assign a 1 ... will be added into artis available taxa for a country in subsequent code lines
+  rename(sciname_hs_modified = "ScientificName", species = "Species", genus = "Genus", subfamily = "SubFamily", family = "Family", order = "Order", class = "Class", superclass = "SuperClass", phylum = "Phylum", kingdom = "Kingdom", eez_iso3c = "country")
+
+# FB/SLB does not have superclass/phylum/kingdom, so we will first (1) match with artis to obtain superclass, phylum, and kingdom, and fill in the rest with rgbif
+
+# Get class names for fb_slb data (will combine with artis_scinames to get phylum, kingdom, which fishbase does not have)
+class_taxa_names <- fb_slb_commercial_interests %>%
+  ungroup() %>%
+  distinct(class) %>%
+  pull(class)
+
+# Create an empty list
+superclass_phylum_kingdom <- data.frame(class = class_taxa_names, superclass = NA_character_, phylum = NA_character_, kingdom = NA_character_)
+for (i in class_taxa_names) {
+  matched_scinames <- sciname %>%
+    filter(class == i) %>%
+    distinct(superclass, phylum, kingdom) %>%
+    select(superclass, phylum, kingdom)
+  
+  # Check to see if dataframe is empty or not
+  if (dim(matched_scinames)[1] == 0) {
+    matched_scinames <- data.frame(superclass = NA_character_,
+                                            phylum = NA_character_,
+                                            kingdom = NA_character_)
+  }
+  k <- which(class_taxa_names == i) # Currentl index in class list
+  # Add entries into a list
+  superclass_phylum_kingdom$superclass[k] <- matched_scinames$superclass
+  superclass_phylum_kingdom$phylum[k] <- matched_scinames$phylum
+  superclass_phylum_kingdom$kingdom[k] <- matched_scinames$kingdom
+}
+
+# Exclude rows that already completely filled (rows with no NAs)
+taxa_to_be_filled <- superclass_phylum_kingdom %>%
+  filter(is.na(superclass) |
+         is.na(phylum) |
+         is.na(kingdom))
+
+
+# New script to refer to to obtain Global Biodiversity Information Facility (rgbif) taxa data - refer to "accepted" column to filter for target species that we will be getting the missing phylum / kingdom names
+
+# taxa_to_be_filled is fed through this script to fill in phylum/kingdom names (takes awhile hence why another script was created)
+# rmarkdown::render("../code/QuirozConnor_SGL_Obtain_gbif_Data.Rmd")
+taxa_to_be_filled_gbif <- read_parquet("../data/rgbif_data/taxa_to_be_filled_gbif.parquet")
+
+# Combine rows fb/slb unlinked names that didn't need filling in + filled in phylum/kingdom names obtained via gbif
+filled_fb_slb_taxa <- bind_rows(superclass_phylum_kingdom %>%
+  filter(!is.na(superclass) &
+         !is.na(phylum) &
+         !is.na(kingdom)), taxa_to_be_filled_gbif)
+
+
+# Fill in the rest of the phylum/kingdom names with gbif
+fb_slb_commercial_interests <- left_join(fb_slb_commercial_interests, filled_fb_slb_taxa, by = "class") %>%
+mutate(
+  superclass = coalesce(superclass.x, superclass.y), # If superclass.x is NA, take superclass.y
+  phylum = coalesce(phylum.x, phylum.y),  # Similarly for phylum
+  kingdom = coalesce(kingdom.x, kingdom.y)) %>% # Similarly for kingdom
+select(-phylum.x, -phylum.y, -kingdom.x, -kingdom.y, -superclass.x, -superclass.y)
+
+# Re-determine if lower resolution taxa are present with both ARTIS + non-ARTIS species
+only_artis <- merged_presence_absence_data_country
+
+# Combine only artis species with fb/slb commercial species NOT in artis (used to increase amount of presences in data via country function)
+pa_only_artis <- bind_rows(only_artis, fb_slb_commercial_interests %>% mutate(source = "unlinked")) %>%
+  mutate(presence_or_absence = case_when(sciname_joinable_to_fishbase %in% fbslb_species_not_in_artis ~ NA, TRUE ~ presence_or_absence))
+
+# Create a new emptt dataframe
+presence_absence_data_linked_unlinked <- data.frame()
+
+pa_only_artis %>% left_join(country_taxa_lookups,
+            by = c("sciname_hs_modified" = "taxa_name")) %>%
+  mutate(
+    countries_found = case_when(
+      !countries_found.x == "" ~ countries_found.x,!countries_found.y == "" ~ countries_found.y,
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  mutate(presence_or_absence_all_taxa = case_when(str_detect(countries_found, eez_iso3c) ~ 1, TRUE ~ 0)) %>%
+  filter(!is.na(sciname_joinable_to_fishbase)) %>%
+  count(presence_or_absence_all_taxa)
+  
+  presence_absence_data %>% filter(!is.na(isscaap)) %>%
+    nrow()
+```
