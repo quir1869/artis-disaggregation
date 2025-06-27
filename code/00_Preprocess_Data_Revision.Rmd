@@ -519,7 +519,7 @@ rm(consumption, fb_presences_country, fb_slb, fb_species_codes, fishbase_presenc
    merged_presence_absence_data_country, pa_only_artis, sciname, sciname_metadata,
    scinames_excluding_tradeflows, sealifebase_presences_country, slb_presences_country,
    slb_species_codes, species_determination, unaligned_names, artis_species_not_in_fbslb,
-   fbslb_species_not_in_artis)
+   fbslb_species_not_in_artis, country_taxa_lookups)
 
 # Garbage collection
 gc()

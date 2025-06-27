@@ -66,8 +66,7 @@ ggplot() +
 
 ```{r preprocess consumption data to add sciname classification}
 # Read in prsence absence consumption data
-consumption_presence_absence <- read_parquet("../output/consumption_presence_absence.parquet") %>%
-  filter(year == 2019)
+consumption_presence_absence <- read_parquet("../output/consumption_presence_absence.parquet")
 
 # Read in sciname data
 sciname <- fread("../data/consumption/sciname.csv") 
@@ -86,12 +85,11 @@ consumption_presence_absence %>%
   summarize(sum_presences = sum(presence_or_absence_all_taxa)) %>%
   create_map(fill = "sum_presences", country.col.name = "eez_iso3c")
 
-
-
-consumption_presence_absence %>%
-  filter(eez_iso3c == "AGO",
-         str_detect(class, "actinopterygii"))
 # Group by eez
+consumption_presence_absence %>%
+  group_by(eez_iso3c) %>%
+  summarize(prop_presence = mean(presence_or_absence_all_taxa, na.rm = TRUE)) %>%
+  create_map(fill = "prop_presence", country.col.name = "eez_iso3c")
   
 ```
 
